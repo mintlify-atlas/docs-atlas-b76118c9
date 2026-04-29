@@ -1,0 +1,158 @@
+---
+title: "Export Your CV to PDF or JSON: Download Options Explained"
+description: "Learn how exportToPDF captures the live CV preview via html2pdf.js and how exportToJSON serializes a Profile object to a downloadable JSON file."
+---
+
+The application provides two export formats accessible from the editor toolbar: a PDF rendered from the live on-screen preview, and a JSON file containing the complete profile data. Both are triggered by the `ExportButtons` component. The underlying logic lives in `src/app/services/exportService.ts` and is intentionally kept separate from the UI so it can be tested or reused independently.
+
+## ExportButtons component
+
+`ExportButtons` receives the active `profile` and the current `template` value. It derives a URL-safe slug from the profile name and uses it to construct deterministic filenames for both exports.
+
+```tsx
+interface Props {
+  profile: Profile;
+  template: 'modern' | 'classic';
+}
+
+export function ExportButtons({ profile, template }: Props) {
+  const slug = profile.nombre.trim().toLowerCase().replace(/\s+/g, '-');
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      <Button onClick={() => exportToPDF('cv-preview', `${slug}-${template}.pdf`)}>
+        <Download size={14} />
+        Descargar PDF
+      </Button>
+      <Button variant="outline" onClick={() => exportToJSON(profile, `${slug}.json`)}>
+        <Download size={14} />
+        Exportar JSON
+      </Button>
+    </div>
+  );
+}
+```
+
+For a profile named `"Ana Garcia"` with the Modern template active, the exported files would be named `ana-garcia-modern.pdf` and `ana-garcia.json`.
+
+## PDF export
+
+`exportToPDF` is an async function that locates the element with `id="cv-preview"` in the DOM and hands it to `html2pdf.js` for rendering.
+
+```typescript
+export async function exportToPDF(elementId: string, filename = 'CV.pdf') {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+
+  await html2pdf()
+    .set({
+      margin: 10,
+      filename,
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
+    })
+    .from(element)
+    .save();
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Canvas scale" icon="magnifying-glass">
+    `html2canvas` is configured with `scale: 2`, which renders the page at double resolution before embedding it in the PDF. This prevents blurry text and sharp edges on high-DPI displays.
+  </Card>
+  <Card title="Page format" icon="document">
+    `jsPDF` is set to `format: 'a4'` with `orientation: 'portrait'` and `unit: 'mm'`. The rendered canvas is fitted to a standard 210 × 297 mm page with a 10 mm margin on all sides.
+  </Card>
+  <Card title="CORS images" icon="globe-alt">
+    `useCORS: true` is passed to `html2canvas` so that any externally hosted images referenced in the template are included in the canvas without triggering cross-origin errors.
+  </Card>
+  <Card title="DOM target" icon="code-bracket">
+    The function reads the element by `elementId`. Both `ModernTemplate` and `ClassicTemplate` render their outer `div` with `id="cv-preview"`, making the call site predictable regardless of which template is active.
+  </Card>
+</CardGroup>
+
+<Warning>
+`exportToPDF` returns early silently if no element with the given ID is found. Ensure the CV preview is rendered in the DOM before triggering the export — it will not be visible if no profile is selected or if the editor has not mounted yet.
+</Warning>
+
+## JSON export
+
+`exportToJSON` is synchronous. It serializes the full `Profile` object to a JSON string with 2-space indentation and triggers a browser download using the Blob API.
+
+```typescript
+export function exportToJSON(profile: Profile, filename = 'perfil-cv.json') {
+  const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+The resulting file contains all profile fields, including nested `experiencia`, `educacion`, and `habilidades` arrays. A typical export for a profile named `"Ana Garcia"` looks like this:
+
+```json
+{
+  "id": "abc123",
+  "nombre": "Ana Garcia",
+  "correo": "ana@example.com",
+  "numero": "+34 600 000 000",
+  "fechaNacimiento": "1990-05-12",
+  "experiencia": [
+    {
+      "empresa": "Acme Corp",
+      "puesto": "Frontend Developer",
+      "inicio": "2020-01-01",
+      "fin": "2023-06-30",
+      "descripcion": "Developed React applications."
+    }
+  ],
+  "educacion": [
+    {
+      "institucion": "Universidad Complutense",
+      "titulo": "Ingeniería Informática",
+      "inicio": "2014-09-01",
+      "fin": "2019-06-30"
+    }
+  ],
+  "habilidades": {
+    "tecnicas": ["JavaScript", "React", "TypeScript"],
+    "blandas": ["Liderazgo", "Comunicacion"]
+  }
+}
+```
+
+<Tip>
+The JSON export captures the exact state of the profile at the moment of the button click. If you update a profile's skills or experience, re-export to get a fresh file reflecting the latest data.
+</Tip>
+
+## Function signatures
+
+<Tabs>
+  <Tab title="exportToPDF">
+    ```typescript
+    exportToPDF(elementId: string, filename?: string): Promise<void>
+    ```
+
+    | Parameter   | Type     | Default    | Description                                          |
+    |-------------|----------|------------|------------------------------------------------------|
+    | `elementId` | `string` | —          | The DOM element ID to capture. Use `'cv-preview'`.   |
+    | `filename`  | `string` | `'CV.pdf'` | Output filename including the `.pdf` extension.      |
+
+    Resolves when `html2pdf.js` has finished generating and saving the file. The browser's native "Save as" dialog appears for the user to choose a download location.
+  </Tab>
+  <Tab title="exportToJSON">
+    ```typescript
+    exportToJSON(profile: Profile, filename?: string): void
+    ```
+
+    | Parameter  | Type      | Default             | Description                                           |
+    |------------|-----------|---------------------|-------------------------------------------------------|
+    | `profile`  | `Profile` | —                   | The full profile object to serialize.                 |
+    | `filename` | `string`  | `'perfil-cv.json'`  | Output filename including the `.json` extension.      |
+
+    Synchronous. Creates an object URL, simulates a click on a temporary anchor element, then immediately revokes the URL to free memory.
+  </Tab>
+</Tabs>

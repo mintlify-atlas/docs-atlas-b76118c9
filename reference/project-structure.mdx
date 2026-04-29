@@ -1,0 +1,233 @@
+---
+title: 'Project Structure: Component Hierarchy and Key Files Guide'
+description: 'Directory layout, component hierarchy, key file responsibilities, and a full tech stack summary for the React CV Builder application.'
+---
+
+The CV Builder is a client-side single-page application bootstrapped with Vite. All application code lives under `src/app/`, which is organized into clearly separated concerns: components, pages, schemas, services, store, and types. The root `App.tsx` orchestrates which view is rendered based on two pieces of local state — the active `View` and the selected `Template` — combined with the `selectedProfileId` and `showForm` values from the Zustand store.
+
+## Directory tree
+
+<Tree>
+  <Tree.Folder name="src" defaultOpen>
+    <Tree.File name="main.tsx" />
+    <Tree.Folder name="app" defaultOpen>
+      <Tree.File name="App.tsx" />
+      <Tree.File name="types.ts" />
+      <Tree.Folder name="components" defaultOpen>
+        <Tree.File name="Dashboard.tsx" />
+        <Tree.File name="ProfileForm.tsx" />
+        <Tree.File name="ProfileSelector.tsx" />
+        <Tree.File name="ExportButtons.tsx" />
+        <Tree.File name="AboutUsModal.tsx" />
+        <Tree.Folder name="layout" defaultOpen>
+          <Tree.File name="TopBar.tsx" />
+          <Tree.File name="DocumentCards.tsx" />
+          <Tree.File name="ProfileAvatar.tsx" />
+        </Tree.Folder>
+        <Tree.Folder name="preview" defaultOpen>
+          <Tree.File name="ModernTemplate.tsx" />
+          <Tree.File name="ClassicTemplate.tsx" />
+        </Tree.Folder>
+        <Tree.Folder name="ui" />
+        <Tree.Folder name="figma" />
+      </Tree.Folder>
+      <Tree.Folder name="pages" defaultOpen>
+        <Tree.File name="EditorPage.tsx" />
+        <Tree.File name="AboutPage.tsx" />
+      </Tree.Folder>
+      <Tree.Folder name="schemas" defaultOpen>
+        <Tree.File name="profile.ts" />
+      </Tree.Folder>
+      <Tree.Folder name="services" defaultOpen>
+        <Tree.File name="exportService.ts" />
+      </Tree.Folder>
+      <Tree.Folder name="store" defaultOpen>
+        <Tree.File name="profile-store.ts" />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.Folder name="styles" />
+  </Tree.Folder>
+  <Tree.File name="package.json" />
+  <Tree.File name="vite.config.ts" />
+</Tree>
+
+## App.tsx — root component
+
+`App.tsx` is the single entry point for view routing. It does not use React Router for page transitions; instead, it manages a `View` union type (`'welcome' | 'editor' | 'about'`) in local state and renders the appropriate component tree conditionally.
+
+```typescript src/app/App.tsx
+type View = 'welcome' | 'editor' | 'about';
+type Template = 'modern' | 'classic';
+```
+
+The rendering logic follows this decision tree:
+
+- No `selectedProfile` and `showForm` is false → render `<ProfileSelector />`
+- `showForm` is true → render `<ProfileForm />`
+- `selectedProfile` exists and `view === 'welcome'` → render `<Dashboard />`
+- `selectedProfile` exists and `view === 'editor'` → render `<EditorPage />`
+- `selectedProfile` exists and `view === 'about'` → render `<AboutPage />`
+
+`TopBar` is only rendered when a profile is selected and the form is not visible. When `selectedProfileId` is cleared (e.g., via `goBack`), a `useEffect` resets the view to `'welcome'` automatically.
+
+## Component hierarchy
+
+<CardGroup cols={2}>
+  <Card title="ProfileSelector" icon="address-card">
+    Shown on first load when no profile has been selected. Displays existing profiles as circular avatar buttons in a flex row (showing up to 2 initials from the name), plus a `+` / "Nuevo" button that calls `openForm()` to create a new profile.
+  </Card>
+  <Card title="ProfileForm" icon="pen-to-square">
+    Full form component using plain `useState` for field state, validated by `profileFormSchema` via Zod's `safeParse`. On successful submission calls `createProfileFromValues` and dispatches the result to `addProfile`.
+  </Card>
+  <Card title="Dashboard" icon="table-columns">
+    Rendered after a profile is selected. Shows `DocumentCards` — one card per available template (`modern`, `classic`). Selecting a card calls `onSelectDocument` with the chosen template name, transitioning the view to `editor`.
+  </Card>
+  <Card title="EditorPage" icon="file-pen">
+    Shows a live preview of the CV using either `ModernTemplate` or `ClassicTemplate` alongside `ExportButtons`. Accepts `onTemplateChange` and `onBack` props to allow switching templates or returning to the dashboard.
+  </Card>
+  <Card title="TopBar" icon="bars">
+    Fixed header rendered whenever a profile is active. Contains navigation controls including an "About" link that sets the view to `'about'`.
+  </Card>
+  <Card title="AboutPage" icon="circle-info">
+    A standalone page rendered when the user navigates to the About view. Accepts an `onBack` callback that returns the view to `'welcome'`.
+  </Card>
+</CardGroup>
+
+### CV preview templates
+
+Both templates live in `src/app/components/preview/` and receive a `Profile` as their primary prop. They render the CV structure as HTML, which `exportService.exportToPDF` captures via `html2pdf.js`.
+
+<Tabs>
+  <Tab title="ModernTemplate">
+    `ModernTemplate.tsx` renders a contemporary layout with visual hierarchy typical of modern CV designs — typically featuring colored headers, sidebar sections, and icon-accompanied contact details.
+  </Tab>
+  <Tab title="ClassicTemplate">
+    `ClassicTemplate.tsx` renders a traditional chronological layout suited for formal or academic contexts — typically a single-column structure with conservative typography.
+  </Tab>
+</Tabs>
+
+<Note>
+  The `template` state in `App.tsx` is initialized to `'modern'`. When `Dashboard` calls `onSelectDocument(nextTemplate)`, the selected template name is stored in local state and passed down to `EditorPage` as the `template` prop.
+</Note>
+
+## Key files
+
+### src/app/store/profile-store.ts
+
+The Zustand store is the single source of truth for profile data at runtime. It holds the `profiles` array, the `selectedProfileId`, and the `showForm` flag that controls form visibility.
+
+```typescript src/app/store/profile-store.ts
+interface ProfileStore {
+  profiles: Profile[];
+  selectedProfileId: string | null;
+  showForm: boolean;
+  addProfile: (profile: Profile) => void;
+  selectProfile: (profileId: string) => void;
+  openForm: () => void;
+  closeForm: () => void;
+  goBack: () => void;
+}
+
+export const useProfileStore = create<ProfileStore>((set) => ({
+  profiles: [],
+  selectedProfileId: null,
+  showForm: false,
+  addProfile: (profile) =>
+    set((state) => ({
+      profiles: [...state.profiles, profile],
+      showForm: false,
+    })),
+  selectProfile: (profileId) => set({ selectedProfileId: profileId }),
+  openForm: () => set({ showForm: true, selectedProfileId: null }),
+  closeForm: () => set({ showForm: false }),
+  goBack: () => set({ selectedProfileId: null }),
+}));
+```
+
+Store actions at a glance:
+
+| Action | Behavior |
+|--------|----------|
+| `addProfile(profile)` | Appends a new `Profile` to `profiles` and sets `showForm` to `false` |
+| `selectProfile(profileId)` | Sets `selectedProfileId` to activate a profile |
+| `openForm()` | Sets `showForm: true` and clears `selectedProfileId` |
+| `closeForm()` | Sets `showForm: false` without changing the selected profile |
+| `goBack()` | Clears `selectedProfileId`, which triggers the `useEffect` in `App.tsx` to reset the view to `'welcome'` and return to `ProfileSelector` |
+
+<Note>
+  Profile data is held in memory only. There is no `localStorage` persistence or backend sync — refreshing the page resets the store to its initial empty state.
+</Note>
+
+### src/app/services/exportService.ts
+
+`exportService.ts` exposes two export functions. PDF export uses `html2pdf.js` to render a DOM element to a downloadable A4 PDF. JSON export serializes the `Profile` object to a pretty-printed JSON file using the Blob and object URL APIs.
+
+```typescript src/app/services/exportService.ts
+export async function exportToPDF(elementId: string, filename = 'CV.pdf') {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+
+  await html2pdf()
+    .set({
+      margin: 10,
+      filename,
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
+    })
+    .from(element)
+    .save();
+}
+
+export function exportToJSON(profile: Profile, filename = 'perfil-cv.json') {
+  const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+```
+
+`exportToPDF` renders at `scale: 2` for high-DPI output and targets A4 portrait in millimeters. `exportToJSON` immediately revokes the object URL after triggering the download to avoid memory leaks.
+
+### src/app/schemas/profile.ts
+
+Contains `profileFormSchema` (Zod), `createProfileFromValues`, and the private `parseSkills` helper. See the [Validation reference](/reference/validation) for full field-by-field documentation.
+
+### src/app/types.ts
+
+Defines the four core TypeScript interfaces: `Experience`, `Education`, `Profile`, and `ProfileFormValues`. See the [Data types reference](/reference/data-types) for full field documentation.
+
+## Tech stack
+
+<CardGroup cols={2}>
+  <Card title="React 18" icon="react">
+    UI library. The application uses function components, hooks (`useState`, `useEffect`), and Zustand for state outside the component tree.
+  </Card>
+  <Card title="TypeScript" icon="code">
+    Strict typing throughout. All interfaces are defined in `src/app/types.ts` and imported wherever `Profile` data is consumed.
+  </Card>
+  <Card title="Vite 6" icon="bolt">
+    Build tool and dev server. Configured with the `@vitejs/plugin-react` and `@tailwindcss/vite` plugins. Path alias `@` maps to `src/`.
+  </Card>
+  <Card title="Tailwind CSS v4" icon="paintbrush">
+    Utility-first styling. Integrated via the Vite plugin (`@tailwindcss/vite`) rather than a PostCSS config, as required by Tailwind v4's plugin-based architecture.
+  </Card>
+  <Card title="Zustand v5" icon="database">
+    Minimal global state management. A single `useProfileStore` hook exposes the profiles array, selection state, and all mutating actions.
+  </Card>
+  <Card title="Zod v4" icon="shield-check">
+    Runtime schema validation for the profile form. The `profileFormSchema` is also used inside `createProfileFromValues` to guarantee data integrity before storage.
+  </Card>
+  <Card title="react-hook-form" icon="wpforms">
+    Listed as a dependency in `package.json`. The current `ProfileForm` implementation uses plain React `useState` for form state management rather than react-hook-form directly.
+  </Card>
+  <Card title="html2pdf.js v0.10" icon="file-pdf">
+    Converts a DOM element (the active CV template) to a downloadable A4 PDF using `html2canvas` and `jsPDF` under the hood.
+  </Card>
+</CardGroup>
+
+<Tip>
+  Additional UI primitives come from Radix UI (unstyled accessible components), MUI v7 (Material Design components), Lucide React (icons), and `react-toastify` for toast notifications. These are all listed in the `dependencies` section of `package.json`.
+</Tip>

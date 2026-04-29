@@ -1,0 +1,388 @@
+---
+title: 'Form Validation Schemas and Profile Creation Logic'
+description: 'Field-by-field reference for the Zod profileFormSchema, all error messages surfaced in the UI, and the createProfileFromValues normalization function.'
+---
+
+All form validation in the CV Builder is handled by a single Zod schema — `profileFormSchema` — defined in `src/app/schemas/profile.ts`. The schema is composed from two reusable sub-schemas (`experienceSchema` and `educationSchema`) and a top-level `.superRefine` call that enforces skill requirements. When the form passes validation, `createProfileFromValues` converts the raw `ProfileFormValues` object into a fully normalized `Profile` ready for the Zustand store.
+
+## Validation schemas
+
+### Full schema source
+
+```typescript src/app/schemas/profile.ts
+import { z } from 'zod';
+import { Profile, ProfileFormValues } from '../types';
+
+const requiredText = (label: string) =>
+  z.string().trim().min(1, `El campo ${label} es obligatorio.`);
+
+const optionalDateRangeMessage = 'La fecha de fin no puede ser anterior a la de inicio.';
+
+const experienceSchema = z
+  .object({
+    empresa: z.string().trim(),
+    puesto: z.string().trim(),
+    inicio: z.string().trim(),
+    fin: z.string().trim(),
+    descripcion: z.string().trim(),
+  })
+  .superRefine((value, ctx) => {
+    const hasContent = Object.values(value).some(Boolean);
+    if (!hasContent) return;
+
+    if (!value.empresa) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['empresa'], message: 'Ingresa la empresa.' });
+    }
+    if (!value.puesto) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['puesto'], message: 'Ingresa el puesto.' });
+    }
+    if (!value.inicio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inicio'], message: 'Ingresa la fecha de inicio.' });
+    }
+    if (!value.fin) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fin'], message: 'Ingresa la fecha de fin.' });
+    }
+    if (value.inicio && value.fin && value.fin < value.inicio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fin'], message: optionalDateRangeMessage });
+    }
+  });
+
+const educationSchema = z
+  .object({
+    institucion: z.string().trim(),
+    titulo: z.string().trim(),
+    inicio: z.string().trim(),
+    fin: z.string().trim(),
+  })
+  .superRefine((value, ctx) => {
+    const hasContent = Object.values(value).some(Boolean);
+    if (!hasContent) return;
+
+    if (!value.institucion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['institucion'],
+        message: 'Ingresa la institucion.',
+      });
+    }
+    if (!value.titulo) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['titulo'], message: 'Ingresa el titulo o grado.' });
+    }
+    if (!value.inicio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inicio'], message: 'Ingresa la fecha de inicio.' });
+    }
+    if (!value.fin) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fin'], message: 'Ingresa la fecha de fin.' });
+    }
+    if (value.inicio && value.fin && value.fin < value.inicio) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['fin'], message: optionalDateRangeMessage });
+    }
+  });
+
+export const profileFormSchema = z.object({
+  nombre: requiredText('nombre completo'),
+  correo: z.email('Ingresa un correo electronico valido.'),
+  numero: z
+    .string()
+    .trim()
+    .min(8, 'Ingresa un numero de telefono valido.')
+    .regex(/^[0-9+\-\s()]+$/, 'El telefono solo puede contener numeros y simbolos comunes.'),
+  fechaNacimiento: z
+    .string()
+    .min(1, 'Ingresa la fecha de nacimiento.')
+    .refine((value) => value <= new Date().toISOString().split('T')[0], {
+      message: 'La fecha de nacimiento no puede estar en el futuro.',
+    }),
+  experiencia: z.array(experienceSchema),
+  educacion: z.array(educationSchema),
+  habilidadesTecnicas: z.string().trim(),
+  habilidadesBlandas: z.string().trim(),
+})
+  .superRefine((value, ctx) => {
+    const tecnicas = parseSkills(value.habilidadesTecnicas);
+    const blandas = parseSkills(value.habilidadesBlandas);
+
+    if (tecnicas.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['habilidadesTecnicas'],
+        message: 'Agrega al menos una habilidad tecnica.',
+      });
+    }
+
+    if (blandas.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['habilidadesBlandas'],
+        message: 'Agrega al menos una habilidad blanda.',
+      });
+    }
+  });
+```
+
+## Field-by-field validation rules
+
+### Personal information fields
+
+<AccordionGroup>
+  <Accordion title="nombre — full name">
+    Validated via the shared `requiredText` helper, which trims the value and requires at least one character after trimming.
+
+    <ParamField body="nombre" type="string" required>
+      Full name. Must be non-empty after whitespace is trimmed.
+    </ParamField>
+
+    | Rule | Details |
+    |------|---------|
+    | Trim | Leading/trailing whitespace removed before length check |
+    | Min length | 1 character (after trim) |
+
+    **Error message:** `El campo nombre completo es obligatorio.`
+  </Accordion>
+
+  <Accordion title="correo — email address">
+    Uses Zod's built-in `z.email()` validator, which checks for a valid RFC-compliant email format.
+
+    <ParamField body="correo" type="string" required>
+      Email address. Must be a syntactically valid email.
+    </ParamField>
+
+    | Rule | Details |
+    |------|---------|
+    | Format | Must pass `z.email()` validation |
+
+    **Error message:** `Ingresa un correo electronico valido.`
+  </Accordion>
+
+  <Accordion title="numero — phone number">
+    Enforces a minimum length and a character-whitelist regex to prevent non-phone characters.
+
+    <ParamField body="numero" type="string" required>
+      Phone number. Must be at least 8 characters and contain only digits and common phone symbols.
+    </ParamField>
+
+    | Rule | Details |
+    |------|---------|
+    | Trim | Whitespace stripped before other checks |
+    | Min length | 8 characters |
+    | Regex | `/^[0-9+\-\s()]+$/` — digits, `+`, `-`, spaces, `(`, `)` only |
+
+    **Error messages:**
+    - `Ingresa un numero de telefono valido.` (fewer than 8 characters)
+    - `El telefono solo puede contener numeros y simbolos comunes.` (invalid characters)
+  </Accordion>
+
+  <Accordion title="fechaNacimiento — date of birth">
+    Requires a non-empty value and uses a `.refine` guard to prevent future dates by comparing the ISO string against today's date.
+
+    <ParamField body="fechaNacimiento" type="string" required>
+      Date of birth as an ISO 8601 date string (e.g., `"1990-04-15"`). Must not be in the future.
+    </ParamField>
+
+    | Rule | Details |
+    |------|---------|
+    | Required | Must have at least 1 character |
+    | Not future | `value <= new Date().toISOString().split('T')[0]` |
+
+    **Error messages:**
+    - `Ingresa la fecha de nacimiento.` (empty)
+    - `La fecha de nacimiento no puede estar en el futuro.` (future date)
+  </Accordion>
+</AccordionGroup>
+
+### Experience entries
+
+`experienceSchema` uses `.superRefine` to implement conditional validation: if every field in a row is blank the entry is treated as intentionally empty and skipped entirely. Only when at least one field has a value does the schema enforce completeness.
+
+<AccordionGroup>
+  <Accordion title="empresa — company name">
+    <ParamField body="empresa" type="string">
+      Company or organization name. Required only when at least one other field in the same entry has a value.
+    </ParamField>
+
+    **Error message:** `Ingresa la empresa.`
+  </Accordion>
+
+  <Accordion title="puesto — job title">
+    <ParamField body="puesto" type="string">
+      Job title or role. Required only when at least one other field in the same entry has a value.
+    </ParamField>
+
+    **Error message:** `Ingresa el puesto.`
+  </Accordion>
+
+  <Accordion title="inicio — start date">
+    <ParamField body="inicio" type="string">
+      Start date as an ISO 8601 date string. Required when any field in the entry is filled.
+    </ParamField>
+
+    **Error message:** `Ingresa la fecha de inicio.`
+  </Accordion>
+
+  <Accordion title="fin — end date">
+    <ParamField body="fin" type="string">
+      End date as an ISO 8601 date string. Required when any field is filled. Must not precede `inicio`.
+    </ParamField>
+
+    **Error messages:**
+    - `Ingresa la fecha de fin.` (empty when other fields are present)
+    - `La fecha de fin no puede ser anterior a la de inicio.` (end before start)
+  </Accordion>
+
+  <Accordion title="descripcion — job description">
+    <ParamField body="descripcion" type="string">
+      Free-text description of responsibilities. Optional — no validation error is raised if this field is blank even when other fields are filled.
+    </ParamField>
+
+    No validation constraints beyond string trimming.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Date comparison for experience entries is performed as a lexicographic string comparison: `value.fin < value.inicio`. This works correctly for ISO 8601 date strings (`YYYY-MM-DD`) because their lexicographic order matches chronological order.
+</Note>
+
+### Education entries
+
+`educationSchema` applies the same conditional-validation pattern as `experienceSchema`. An all-blank row passes without error; a partially-filled row triggers required-field errors.
+
+<AccordionGroup>
+  <Accordion title="institucion — institution name">
+    <ParamField body="institucion" type="string">
+      Name of the university, school, or training provider. Required when any other field in the entry has a value.
+    </ParamField>
+
+    **Error message:** `Ingresa la institucion.`
+  </Accordion>
+
+  <Accordion title="titulo — degree or title">
+    <ParamField body="titulo" type="string">
+      Degree, diploma, or certificate title. Required when any other field in the entry has a value.
+    </ParamField>
+
+    **Error message:** `Ingresa el titulo o grado.`
+  </Accordion>
+
+  <Accordion title="inicio — start date">
+    <ParamField body="inicio" type="string">
+      Start date as an ISO 8601 date string. Required when any field in the entry is filled.
+    </ParamField>
+
+    **Error message:** `Ingresa la fecha de inicio.`
+  </Accordion>
+
+  <Accordion title="fin — end date">
+    <ParamField body="fin" type="string">
+      End date as an ISO 8601 date string. Required when any field is filled. Must not precede `inicio`.
+    </ParamField>
+
+    **Error messages:**
+    - `Ingresa la fecha de fin.` (empty when other fields are present)
+    - `La fecha de fin no puede ser anterior a la de inicio.` (end before start)
+  </Accordion>
+</AccordionGroup>
+
+### Skills fields
+
+Both skills fields are validated at the `profileFormSchema` level using a `.superRefine` call that runs after all individual field checks. The raw string is parsed by the internal `parseSkills` helper, which splits on commas and filters empty tokens.
+
+<Tabs>
+  <Tab title="habilidadesTecnicas">
+    <ParamField body="habilidadesTecnicas" type="string" required>
+      Comma-separated list of technical skills (e.g., `"React, TypeScript, Node.js"`). Must resolve to at least one non-empty token after splitting and trimming.
+    </ParamField>
+
+    **Error message:** `Agrega al menos una habilidad tecnica.`
+  </Tab>
+  <Tab title="habilidadesBlandas">
+    <ParamField body="habilidadesBlandas" type="string" required>
+      Comma-separated list of soft skills (e.g., `"Liderazgo, Comunicación"`). Must resolve to at least one non-empty token after splitting and trimming.
+    </ParamField>
+
+    **Error message:** `Agrega al menos una habilidad blanda.`
+  </Tab>
+</Tabs>
+
+The `parseSkills` helper used internally:
+
+```typescript src/app/schemas/profile.ts
+function parseSkills(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+```
+
+## Error message reference
+
+All validation error strings surfaced in the UI, organized by field:
+
+| Field | Condition | Message |
+|-------|-----------|---------|
+| `nombre` | Empty or whitespace-only | `El campo nombre completo es obligatorio.` |
+| `correo` | Invalid email format | `Ingresa un correo electronico valido.` |
+| `numero` | Fewer than 8 characters | `Ingresa un numero de telefono valido.` |
+| `numero` | Contains disallowed characters | `El telefono solo puede contener numeros y simbolos comunes.` |
+| `fechaNacimiento` | Empty | `Ingresa la fecha de nacimiento.` |
+| `fechaNacimiento` | Future date | `La fecha de nacimiento no puede estar en el futuro.` |
+| `experiencia[n].empresa` | Missing when entry is partial | `Ingresa la empresa.` |
+| `experiencia[n].puesto` | Missing when entry is partial | `Ingresa el puesto.` |
+| `experiencia[n].inicio` | Missing when entry is partial | `Ingresa la fecha de inicio.` |
+| `experiencia[n].fin` | Missing when entry is partial | `Ingresa la fecha de fin.` |
+| `experiencia[n].fin` | End before start | `La fecha de fin no puede ser anterior a la de inicio.` |
+| `educacion[n].institucion` | Missing when entry is partial | `Ingresa la institucion.` |
+| `educacion[n].titulo` | Missing when entry is partial | `Ingresa el titulo o grado.` |
+| `educacion[n].inicio` | Missing when entry is partial | `Ingresa la fecha de inicio.` |
+| `educacion[n].fin` | Missing when entry is partial | `Ingresa la fecha de fin.` |
+| `educacion[n].fin` | End before start | `La fecha de fin no puede ser anterior a la de inicio.` |
+| `habilidadesTecnicas` | Resolves to zero skills | `Agrega al menos una habilidad tecnica.` |
+| `habilidadesBlandas` | Resolves to zero skills | `Agrega al menos una habilidad blanda.` |
+
+## createProfileFromValues
+
+`createProfileFromValues` is the single function responsible for converting a validated `ProfileFormValues` object into a `Profile`. It calls `profileFormSchema.parse` internally, so it will throw a `ZodError` if passed invalid data — it is not designed to be called before validation succeeds.
+
+```typescript src/app/schemas/profile.ts
+export function createProfileFromValues(values: ProfileFormValues): Profile {
+  const parsed = profileFormSchema.parse(values);
+
+  return {
+    id: crypto.randomUUID(),
+    nombre: parsed.nombre.trim(),
+    correo: parsed.correo.trim(),
+    numero: parsed.numero.trim(),
+    fechaNacimiento: parsed.fechaNacimiento,
+    experiencia: parsed.experiencia.filter((item) => Object.values(item).some(Boolean)),
+    educacion: parsed.educacion.filter((item) => Object.values(item).some(Boolean)),
+    habilidades: {
+      tecnicas: parseSkills(parsed.habilidadesTecnicas),
+      blandas: parseSkills(parsed.habilidadesBlandas),
+    },
+  };
+}
+```
+
+### What it does step by step
+
+<Steps>
+  <Step title="Validate the input">
+    Calls `profileFormSchema.parse(values)`. Throws `ZodError` if any field violates a constraint. In normal usage, `ProfileForm` calls `profileFormSchema.safeParse` first and only calls `createProfileFromValues` after validation succeeds, so this internal `parse` is a safety net rather than the primary validation path.
+  </Step>
+  <Step title="Generate a unique ID">
+    Calls `crypto.randomUUID()` to produce a new UUIDv4 for `Profile.id`. This happens outside the schema so that re-submitting the same values always produces a distinct profile.
+  </Step>
+  <Step title="Trim string fields">
+    Applies `.trim()` to `nombre`, `correo`, and `numero` a second time after parsing. The schema already trims these values, so this is defensive redundancy.
+  </Step>
+  <Step title="Filter empty array entries">
+    Removes experience and education rows where every field is falsy: `filter((item) => Object.values(item).some(Boolean))`. This converts the form's placeholder empty rows into a clean array.
+  </Step>
+  <Step title="Parse skills">
+    Calls `parseSkills()` on both `habilidadesTecnicas` and `habilidadesBlandas`, splitting on commas and filtering empty tokens, to produce the final `string[]` arrays stored on the profile.
+  </Step>
+</Steps>
+
+<Tip>
+  Because `createProfileFromValues` calls `profileFormSchema.parse` internally, you can use it as a standalone normalization utility in tests or scripts — pass any `ProfileFormValues` object and it will throw descriptive `ZodError` messages if the data is invalid.
+</Tip>

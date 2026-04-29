@@ -1,0 +1,174 @@
+---
+title: "Profile Management: Create, Fill, and Switch CV Profiles"
+description: "Learn how the multi-profile system works, how to fill in the ProfileForm sections, and how the Zustand store manages profile state across the application."
+---
+
+The CV Builder stores each person's information as a `Profile` object in a Zustand store. You can create any number of profiles, each saved independently in memory, and switch between them at any time without losing data. All form state is managed locally in `ProfileForm` and committed to the store only when the form is successfully submitted.
+
+## Profile data model
+
+Every profile conforms to the `Profile` interface defined in `src/app/types.ts`. The fields map directly to the form sections you fill in when creating a new profile.
+
+```typescript
+export interface Experience {
+  empresa: string;   // Company name
+  puesto: string;    // Job title
+  inicio: string;    // Start date (ISO date string)
+  fin: string;       // End date (ISO date string)
+  descripcion: string;
+}
+
+export interface Education {
+  institucion: string;  // School or university name
+  titulo: string;       // Degree or certification title
+  inicio: string;
+  fin: string;
+}
+
+export interface Profile {
+  id: string;
+  nombre: string;
+  correo: string;
+  numero: string;
+  fechaNacimiento: string;
+  experiencia: Experience[];
+  educacion: Education[];
+  habilidades: {
+    tecnicas: string[];
+    blandas: string[];
+  };
+}
+```
+
+<Note>
+The `habilidades.tecnicas` and `habilidades.blandas` arrays are derived by splitting comma-separated strings entered in the form. The form type `ProfileFormValues` uses `habilidadesTecnicas: string` and `habilidadesBlandas: string` for this reason.
+</Note>
+
+## Creating a new profile
+
+Open the form by calling `openForm()` from the store (triggered by the `+` / "Nuevo" button on the `ProfileSelector` screen). The `ProfileForm` component mounts with all fields empty and one blank entry pre-populated in both `experiencia` and `educacion`.
+
+<Steps>
+  <Step title="Fill in personal data">
+    The first section collects the four core fields: full name (`nombre`), email (`correo`), phone number (`numero`), and date of birth (`fechaNacimiento`). All four fields are required and validated before the form can be submitted.
+
+    ```tsx
+    <input
+      type="text"
+      placeholder="Nombre completo"
+      value={values.nombre}
+      onChange={(e) => setFieldValue('nombre', e.target.value)}
+    />
+    ```
+  </Step>
+
+  <Step title="Add work experience entries">
+    The "Experiencia laboral" section starts with one blank entry. Use the `+` button (top-right of the section header) to append additional entries. Each entry captures company name, job title, start date, end date, and a free-text description.
+
+    ```tsx
+    const addExperiencia = () => {
+      setValues((current) => ({
+        ...current,
+        experiencia: [...current.experiencia, { ...emptyExperience }],
+      }));
+    };
+    ```
+
+    Click the `−` button inside an entry card to remove it. The remove button is only shown when more than one entry exists.
+  </Step>
+
+  <Step title="Add education entries">
+    The "Educacion" section follows the same pattern as work experience. Each entry captures institution name, degree or title (`titulo`), start date, and end date.
+
+    ```tsx
+    const updateEducacion = (index: number, field: keyof Education, value: string) => {
+      setValues((current) => ({
+        ...current,
+        educacion: current.educacion.map((item, i) =>
+          i === index ? { ...item, [field]: value } : item,
+        ),
+      }));
+    };
+    ```
+  </Step>
+
+  <Step title="Enter skills as comma-separated lists">
+    The "Habilidades" section has two textareas. Enter each skill separated by a comma. The form placeholder shows the expected format:
+
+    - **Habilidades tecnicas**: `JavaScript, React, TypeScript...`
+    - **Habilidades blandas**: `Trabajo en equipo, Liderazgo, Comunicacion...`
+
+    These strings are split into arrays when the profile is created via `createProfileFromValues`.
+  </Step>
+
+  <Step title="Submit the form">
+    Clicking "Crear perfil" fires `handleSubmit`, which validates the form values against `profileFormSchema` using Zod's `safeParse`. If validation fails, field-level error messages appear and a toast is shown. On success, `addProfile` is called with the constructed `Profile` object and the form closes automatically.
+
+    ```tsx
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      const result = profileFormSchema.safeParse(values);
+      if (!result.success) {
+        setErrors(buildErrors(result.error.issues));
+        toast.error('Revisa los campos marcados antes de continuar.');
+        return;
+      }
+      setErrors({});
+      addProfile(createProfileFromValues(values));
+      toast.success('Perfil creado correctamente.');
+    };
+    ```
+  </Step>
+</Steps>
+
+## Multi-profile support
+
+The store holds an array of `Profile` objects. Each time `addProfile` is called, the new profile is appended to the array and the form is closed automatically. On the Dashboard you can see all existing profiles listed as cards and click any one to open it in the editor.
+
+```typescript
+addProfile: (profile) =>
+  set((state) => ({
+    profiles: [...state.profiles, profile],
+    showForm: false,
+  })),
+```
+
+<Tip>
+There is no upper limit on the number of profiles you can create in a session. All profiles are stored in memory; refreshing the page resets the store.
+</Tip>
+
+## Zustand store actions
+
+The `useProfileStore` hook exposes the following actions:
+
+<CardGroup cols={2}>
+  <Card title="addProfile" icon="circle-plus">
+    Appends a new `Profile` to the `profiles` array and sets `showForm` to `false`, closing the form immediately after a successful submission.
+  </Card>
+  <Card title="selectProfile" icon="cursor-arrow-rays">
+    Sets `selectedProfileId` to the given profile ID, causing the app to render the editor for that profile.
+  </Card>
+  <Card title="openForm" icon="window">
+    Sets `showForm` to `true` and clears `selectedProfileId`, so the app renders the creation form rather than a profile editor.
+  </Card>
+  <Card title="closeForm" icon="x-mark">
+    Sets `showForm` to `false` without saving any data. Called when the user clicks "Cancelar" or the `×` button in the form header.
+  </Card>
+  <Card title="goBack" icon="arrow-left">
+    Clears `selectedProfileId` (sets it to `null`), returning the user to the `ProfileSelector` screen. The `useEffect` in `App.tsx` resets the view to `'welcome'` when `selectedProfileId` becomes `null`.
+  </Card>
+</CardGroup>
+
+```typescript
+export const useProfileStore = create<ProfileStore>((set) => ({
+  profiles: [],
+  selectedProfileId: null,
+  showForm: false,
+  addProfile: (profile) =>
+    set((state) => ({ profiles: [...state.profiles, profile], showForm: false })),
+  selectProfile: (profileId) => set({ selectedProfileId: profileId }),
+  openForm: () => set({ showForm: true, selectedProfileId: null }),
+  closeForm: () => set({ showForm: false }),
+  goBack: () => set({ selectedProfileId: null }),
+}));
+```

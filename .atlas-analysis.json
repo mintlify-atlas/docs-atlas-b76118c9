@@ -1,0 +1,61 @@
+{
+  "projectType": "frontend",
+  "projectName": "CV Builder & Exporter",
+  "projectDescription": "A React-based web application for creating professional CV profiles and exporting them as PDF or JSON using Modern and Classic templates.",
+  "theme": "willow",
+  "primaryColor": "#f76040",
+  "lightColor": "#13c5be",
+  "darkColor": "#a35cfb",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/profile-management",
+              "features/cv-templates",
+              "features/export"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/data-types",
+              "reference/validation",
+              "reference/project-structure"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-profile management with persistent state via Zustand",
+    "Two CV templates: Modern (two-column dark sidebar) and Classic (formal typographic)",
+    "PDF export using html2pdf.js with A4 format and 2x canvas scale",
+    "JSON export for profile data portability",
+    "Form validation with Zod including date range checks and required field enforcement",
+    "Responsive design with Tailwind CSS and shadcn/ui components"
+  ],
+  "publicApiSurface": [
+    "exportToPDF(elementId: string, filename?: string): Promise<void>",
+    "exportToJSON(profile: Profile, filename?: string): void",
+    "useProfileStore — Zustand store: profiles, selectedProfileId, showForm, addProfile, selectProfile, openForm, closeForm, goBack",
+    "profileFormSchema — Zod schema for profile form validation",
+    "createProfileFromValues(values: ProfileFormValues): Profile",
+    "Profile interface: id, nombre, correo, numero, fechaNacimiento, experiencia[], educacion[], habilidades",
+    "Experience interface: empresa, puesto, inicio, fin, descripcion",
+    "Education interface: institucion, titulo, inicio, fin",
+    "ModernTemplate component — two-column CV with dark sidebar",
+    "ClassicTemplate component — single-column formal CV layout"
+  ]
+}

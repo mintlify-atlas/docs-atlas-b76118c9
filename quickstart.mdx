@@ -1,81 +1,147 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
-icon: 'rocket'
+title: 'Quickstart: Run, Create a Profile, and Export Your CV'
+description: 'Install dependencies, start the Vite dev server, create your first CV profile, choose a template, preview the result, and export to PDF or JSON in minutes.'
 ---
 
-## Get started in three steps
+This guide walks you through everything from cloning the repository to downloading your first exported CV. The whole process takes about five minutes. All you need is Node.js and a package manager — no accounts, no API keys, no backend setup.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+Before you begin, make sure you have the following installed on your machine.
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Node.js" icon="server">
+    Node.js 18 or later is recommended. The project uses ES modules (`"type": "module"` in `package.json`) and Vite 6, both of which require a modern Node.js version.
+  </Card>
+  <Card title="npm or pnpm" icon="package">
+    npm ships with Node.js and works out of the box. The repository also includes a `pnpm` override block pinning Vite to `6.3.5`, so pnpm is equally supported.
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Install and run
+
+<Steps>
+  <Step title="Install dependencies">
+    From the project root, install all dependencies with npm. This pulls in React, Vite, Tailwind CSS, Zustand, Zod, html2pdf.js, and the rest of the packages listed in `package.json`.
+
+    <CodeGroup>
+
+    ```bash npm
+    npm i
+    ```
+
+    ```bash pnpm
+    pnpm install
+    ```
+
+    </CodeGroup>
+  </Step>
+
+  <Step title="Start the development server">
+    Start the Vite dev server. By default, Vite serves the app at `http://localhost:5173`.
+
+    <CodeGroup>
+
+    ```bash npm
+    npm run dev
+    ```
+
+    ```bash pnpm
+    pnpm dev
+    ```
+
+    </CodeGroup>
+
+    <Note>
+    The `vite.config.ts` file registers a `figma-asset-resolver` plugin that maps `figma:asset/` imports to files in `src/assets/`. This is a no-op for standard use, so the dev server starts normally.
+    </Note>
+  </Step>
+
+  <Step title="Open the app">
+    Navigate to `http://localhost:5173` in your browser. You will see the **ProfileSelector** screen with a `+` button to create your first profile.
+  </Step>
+</Steps>
+
+## Create your first profile
+
+Click the `+` (Nuevo) button on the ProfileSelector screen. The `ProfileForm` opens. Fill in each section below.
+
+<Steps>
+  <Step title="Personal details">
+    Complete the four personal fields at the top of the form.
+
+    | Field | Description |
+    |---|---|
+    | Full name | Required. Used for avatar initials, file naming, and the CV header. |
+    | Email | Required. Must be a valid email address. |
+    | Phone number | Required. Minimum 8 characters. Accepts digits, `+`, `-`, spaces, and parentheses. |
+    | Date of birth | Required. Cannot be a future date. |
+  </Step>
+
+  <Step title="Work experience">
+    At least one experience entry is pre-populated. Fill in the company name, job title, start date, end date, and a short description of the role. The end date cannot be earlier than the start date.
+
+    Click the `+` icon in the section header to add additional entries. Use the `−` icon on any entry to remove it (visible only when more than one entry exists).
+
+    <Tip>
+    You can leave an experience entry completely empty and it will be ignored when the profile is saved. Only partially-filled entries (where at least one field has a value) trigger validation.
+    </Tip>
+  </Step>
+
+  <Step title="Education">
+    The same pattern applies to education. Provide the institution name, degree or qualification title, and the start and end dates for each entry.
+  </Step>
+
+  <Step title="Skills">
+    Enter skills as comma-separated values in two separate text areas.
+
+    - **Technical skills** — tools, languages, frameworks (e.g. `TypeScript, React, Figma`)
+    - **Soft skills** — interpersonal or transferable skills (e.g. `Team leadership, Communication`)
+
+    At least one value in each field is required. The form trims whitespace and splits on commas at submission time.
+  </Step>
+
+  <Step title="Submit the form">
+    Click **Crear perfil**. Zod validates all fields via `profileFormSchema.safeParse`. If validation passes, `createProfileFromValues` maps the form values to a `Profile` object with a UUID, and the profile is added to the Zustand store. A success toast confirms the save.
+
+    If any field is invalid, error messages appear below the offending inputs and a toast prompts you to fix them before continuing.
+  </Step>
+</Steps>
+
+<Warning>
+Profile data is held in memory only and is not persisted to `localStorage` or any backend. Refreshing the page clears all profiles. Export your profile as JSON before closing the tab if you want to keep a copy.
+</Warning>
+
+## Select a template and preview your CV
+
+After the form is saved, the app returns to **ProfileSelector**. Click your profile avatar to enter the **Dashboard**.
+
+<Steps>
+  <Step title="Choose a template">
+    The Dashboard displays two document cards. Click **Modern** or **Classic** to open the **EditorPage** with that template applied.
+
+    - **Modern** (`ModernTemplate`) — a contemporary layout with visual hierarchy and styled sections.
+    - **Classic** (`ClassicTemplate`) — a traditional, structured layout suited to formal applications.
+  </Step>
+
+  <Step title="Switch templates in the editor">
+    Inside the EditorPage, the toolbar at the top contains a dropdown that lists **Moderno** and **Clásico**. Changing the selection swaps the template instantly without losing your data or navigating away.
+  </Step>
+</Steps>
+
+## Export your CV
+
+The EditorPage toolbar contains two export buttons, both rendered by the `ExportButtons` component.
+
+<CardGroup cols={2}>
+  <Card title="Download PDF" icon="file-down">
+    Calls `exportToPDF('cv-preview', filename)`. html2pdf.js captures the `#cv-preview` DOM element at 2× scale and generates an A4 portrait PDF. The filename follows the pattern `<profile-slug>-<template>.pdf` (e.g. `jane-doe-modern.pdf`).
+  </Card>
+  <Card title="Export JSON" icon="braces">
+    Calls `exportToJSON(profile, filename)`. The full `Profile` object is serialized to a pretty-printed JSON file named `<profile-slug>.json` (e.g. `jane-doe.json`) and downloaded via a temporary anchor element.
+  </Card>
+</CardGroup>
+
+<Tip>
+Use the JSON export as a backup. If you reload the page and lose your in-memory data, the JSON file contains everything needed to reconstruct the profile by re-entering the values into the form.
+</Tip>

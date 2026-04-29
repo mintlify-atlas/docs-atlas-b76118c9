@@ -1,0 +1,162 @@
+---
+title: "CV Templates: Modern Two-Column and Classic Serif Layouts"
+description: "Explore the two built-in CV templates, understand their visual structure, and learn how to switch between them in the editor using the template Select dropdown."
+---
+
+The application ships with two ready-to-use CV templates — **Modern** and **Classic** — each rendering the same `Profile` data in a distinct visual style. Both templates produce an A4-sized preview that is captured directly for PDF export. You select the active template from the dropdown in the editor toolbar; switching is instant and non-destructive.
+
+## Shared rendering contract
+
+Both `ModernTemplate` and `ClassicTemplate` accept a single `profile` prop of type `Profile` and render a `div` with `id="cv-preview"`. The export service locates this element by ID when generating a PDF.
+
+```tsx
+// Both templates share the same outer dimensions
+<div
+  id="cv-preview"
+  className="mx-auto min-h-[1123px] w-full max-w-[794px] bg-white text-gray-900"
+>
+```
+
+The fixed dimensions — 794 px wide and at minimum 1123 px tall — correspond to an A4 page at 96 dpi, ensuring the PDF output matches what you see on screen.
+
+<Note>
+Only one template renders at a time, so only one element with `id="cv-preview"` exists in the DOM. The export service calls `document.getElementById('cv-preview')` and will capture whichever template is currently displayed.
+</Note>
+
+## Template comparison
+
+<CardGroup cols={2}>
+  <Card title="Modern" icon="layout-panel-left">
+    Two-column layout with a dark gray sidebar on the left (240 px) and a white main area on the right. Sidebar shows name, contact details, and skill badges. Main area shows Experience and Education in chronological sections.
+  </Card>
+  <Card title="Classic" icon="document-text">
+    Single-column layout with serif typography throughout. A centered header displays the candidate's name in large serif font followed by contact details separated by bullet points. Sections for Professional Experience, Education, Technical Skills, and Soft Skills follow below.
+  </Card>
+</CardGroup>
+
+## Modern template
+
+The `ModernTemplate` uses a CSS grid split into a 240 px sidebar and a flexible main area. The sidebar has a dark (`bg-gray-900`) background with white text. Skills are rendered as pill badges using `rounded-full bg-white/10`.
+
+```tsx
+<div className="grid min-h-[1123px] grid-cols-[240px_1fr]">
+  <aside className="bg-gray-900 px-8 py-10 text-white">
+    {/* Name, contact info, skills badges */}
+    {profile.habilidades.tecnicas.map((skill) => (
+      <span key={skill} className="rounded-full bg-white/10 px-3 py-1 text-xs">
+        {skill}
+      </span>
+    ))}
+  </aside>
+
+  <main className="px-10 py-10">
+    {/* Experience and Education sections */}
+    {profile.experiencia.map((exp, index) => (
+      <article key={`${exp.empresa}-${index}`}>
+        <h3 className="text-lg font-semibold">{exp.puesto}</h3>
+        <p className="text-sm text-gray-600">{exp.empresa}</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-gray-500">
+          {exp.inicio} - {exp.fin}
+        </p>
+      </article>
+    ))}
+  </main>
+</div>
+```
+
+<Tip>
+The sidebar displays both technical skills (`habilidades.tecnicas`) and soft skills (`habilidades.blandas`) as separate badge groups under their own uppercase labels: "Técnicas" and "Blandas".
+</Tip>
+
+## Classic template
+
+The `ClassicTemplate` renders a single-column document. The header is centered with `text-center` and uses `font-serif tracking-wide` for the candidate's name. Contact fields are rendered inline, separated by `•` bullet characters.
+
+```tsx
+<header className="border-b-2 border-gray-900 pb-6 text-center">
+  <h1 className="text-4xl font-serif tracking-wide">{profile.nombre}</h1>
+  <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-sm text-gray-600">
+    <span>{profile.correo}</span>
+    <span>•</span>
+    <span>{profile.numero}</span>
+    <span>•</span>
+    <span>{profile.fechaNacimiento}</span>
+  </div>
+</header>
+```
+
+Technical and soft skills are rendered in a two-column grid at the bottom, each as a bulleted `<ul>`, with section headings styled `font-serif uppercase tracking-[0.18em]`.
+
+```tsx
+<section className="mt-10 grid grid-cols-2 gap-10">
+  <div>
+    <h2 className="border-b border-gray-300 pb-2 text-lg font-serif uppercase tracking-[0.18em]">
+      Habilidades Técnicas
+    </h2>
+    <ul className="mt-4 space-y-2 text-sm text-gray-700">
+      {profile.habilidades.tecnicas.map((skill) => (
+        <li key={skill}>• {skill}</li>
+      ))}
+    </ul>
+  </div>
+  {/* Habilidades Blandas column */}
+</section>
+```
+
+## Switching templates in the editor
+
+`EditorPage` holds `template` state (type `'modern' | 'classic'`) and passes it down to the `Select` dropdown. Changing the selection calls `onTemplateChange`, which re-renders either `ModernTemplate` or `ClassicTemplate` inside the preview container.
+
+```tsx
+<Select
+  value={template}
+  onValueChange={(value) => onTemplateChange(value as 'modern' | 'classic')}
+>
+  <SelectTrigger className="h-8 w-full text-xs md:w-40">
+    <SelectValue />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value="modern">Moderno</SelectItem>
+    <SelectItem value="classic">Clásico</SelectItem>
+  </SelectContent>
+</Select>
+
+{template === 'modern'
+  ? <ModernTemplate profile={profile} />
+  : <ClassicTemplate profile={profile} />}
+```
+
+The selected template value is also forwarded to `ExportButtons` so the exported PDF filename reflects the active template (e.g., `ana-garcia-modern.pdf`).
+
+## Template selection on the dashboard
+
+Before opening the editor, the Dashboard renders `DocumentCards`, which presents both templates as clickable cards. Selecting a card triggers `onSelect` with either `'modern'` or `'classic'`, setting the initial template for the editor session.
+
+<Tabs>
+  <Tab title="DocumentCards definition">
+    ```typescript
+    const docs = [
+      {
+        id: 'modern' as const,
+        title: 'Documento Moderno',
+        desc: 'Diseño limpio con jerarquía visual marcada.',
+        icon: '◈',
+      },
+      {
+        id: 'classic' as const,
+        title: 'Documento Clásico',
+        desc: 'Estilo formal, sobrio y tipográfico.',
+        icon: '◇',
+      },
+    ];
+    ```
+  </Tab>
+  <Tab title="DocumentCards usage">
+    ```tsx
+    <DocumentCards onSelect={(template) => {
+      // Sets the initial template and navigates to the editor
+      onSelect(template);
+    }} />
+    ```
+  </Tab>
+</Tabs>
